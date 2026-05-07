@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'task_repository.dart';
+import 'task_api_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -116,51 +117,8 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             Expanded(
-              child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: filteredTasks.length,
-              itemBuilder: (context, index) {
-                final task = filteredTasks[index];
-                return Dismissible(
-                    key: ValueKey(task.title),
-                    direction: DismissDirection.endToStart,
-                    onDismissed: (direction) {
-                      setState(() {
-                        TaskRepository.tasks.remove(task);
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text("'${task.title}' zostało usunięte",
-                          textAlign: TextAlign.center,),
-                        ),
-                      );
-                    },
-                    child: TaskCard(
-                        title: "${task.title} | priorytet: ${task.priority}",
-                        deadline: "termin: ${task.deadline}",
-                        done: task.done,
-                        onChanged: (value) {
-                          setState(() {
-                            task.done = value!;
-                          });
-                        },
-                        onTap: () async {
-                          final Task? updatedTask = await Navigator.push(
-                            context,
-                              MaterialPageRoute(
-                                builder: (context) => EditTaskScreen(task: task),
-                              ),
-                          );
-                          if (updatedTask != null) {
-                            setState(() {
-                              TaskRepository.tasks[index] = updatedTask;
-                            });
-                          }
-                        }
-                    )
-                );
-              },
-            ))
+              child: TaskListScreen(),
+            )
           ],
         ),
         floatingActionButton: FloatingActionButton(
@@ -409,3 +367,95 @@ class FilterBar extends StatelessWidget {
     );
   }
 }
+
+class TaskListScreen extends StatefulWidget {
+  const TaskListScreen({super.key});
+
+  @override
+  State<TaskListScreen> createState() => _TaskListScreenState();
+}
+
+class _TaskListScreenState extends State<TaskListScreen> {
+  late Future<List<Task>> tasksFuture;
+  List<Task> tasks = [];
+
+  @override
+  void initState() {
+    super.initState();
+    tasksFuture = TaskApiService.fetchTasks().then((data) {
+      setState(() {
+        tasks = data;
+      });
+      return data;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Task>>(
+      future: tasksFuture,
+      builder: (context, snapshot) {
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text("Błąd: ${snapshot.error}"),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          itemCount: tasks.length,
+          itemBuilder: (context, index) {
+            final task = tasks[index];
+            return Dismissible(
+              key: ValueKey(task.title + index.toString()),
+              direction: DismissDirection.endToStart,
+              onDismissed: (direction) {
+                setState(() {
+                  tasks.remove(task);
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text("'${task.title}' zostało usunięte",
+                        textAlign: TextAlign.center),
+                  ),
+                );
+              },
+              child: TaskCard(
+                title: "${task.title} | priorytet: ${task.priority}",
+                deadline: "termin: ${task.deadline}",
+                done: task.done,
+                onChanged: (value) {
+                  setState(() {
+                    task.done = value!;
+                  });
+                },
+                onTap: () async {
+                  final Task? updatedTask = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => EditTaskScreen(task: task),
+                    ),
+                  );
+                  if (updatedTask != null) {
+                    setState(() {
+                      tasks[index] = updatedTask;
+                    });
+                  }
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+
